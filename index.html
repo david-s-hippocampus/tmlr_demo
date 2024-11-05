@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <style type="text/css">
+        body {
+            /*font-weight: 500;*/
+            font-family: "Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+        }
+    </style>
+    <title>Anonymous interactive demo</title>
+</head>
+<body>
+<h1>Anonymous interactive demo for TMLR submission titled "Neuron-based explanations of neural networks sacrifice completeness and interpretability"</h1>
+<p>We visualize the basis vectors for a NN's activation space. For torchvision pretrained AlexNet, ResNet18, ResNet50, and ViT-B-16, we have included visualizations of the basis vectors defined by principal components and neurons for several layers.</p>
+<p>You can view all the visualizations using the interface below.</p>
+
+<div>
+    <span>Model: </span>
+    <select id="model" onchange="model_changed();">
+        <option value="alexnet">AlexNet</option>
+        <option value="resnet18">ResNet18</option>
+        <option value="resnet50">ResNet50</option>
+        <option value="vit_b_16">ViT B-16</option>
+    </select>
+</div>
+
+<div>
+    <span>Basis: </span>
+    <select id="basis" onchange="layer_changed();">
+        <option value="pca">PCA</option>
+        <option value="neuron">Neuron</option>
+    </select>
+</div>
+
+<div>
+    <span>Layer: </span>
+    <select id="layer" onchange="layer_changed();">
+        <option value="features0">conv1</option>
+        <option value="features3">conv2</option>
+        <option value="features6">conv3</option>
+        <option value="features8">conv4</option>
+        <option value="features10">conv5</option>
+        <option value="classifier1">fc1</option>
+        <option value="classifier4">fc2</option>
+        <option value="classifier6">fc3</option>
+    </select>    
+</div>
+
+<div>
+    <span>Component: </span>
+    <input type="number" id="number" min="1" onchange="component_changed();" style="width:48px;">
+    <span id='max_components'> / 64 available in descending variance order</span>
+</div>
+<div style="border: 1px black solid;margin-top: 10px;">
+    <img id='vis' width="100%">
+</div>
+<script>
+
+var alexnet_layers = [];
+alexnet_layers.push("<option value='features0'>conv1</option>");
+alexnet_layers.push("<option value='features3'>conv2</option>");
+alexnet_layers.push("<option value='features6'>conv3</option>");
+alexnet_layers.push("<option value='features8'>conv4</option>");
+alexnet_layers.push("<option value='features10'>conv5</option>");
+alexnet_layers.push("<option value='classifier1'>fc1</option>");
+alexnet_layers.push("<option value='classifier4'>fc2</option>");
+alexnet_layers.push("<option value='classifier6'>fc3</option>");
+alexnet_layers_html = alexnet_layers.join()
+
+var alexnet_dict = {
+    'features0': 64,
+    'features3': 192,
+    'features6': 384,
+    'features8': 256,
+    'features10': 256,
+    'classifier1': 64,
+    'classifier4': 64,
+    'classifier6': 64,
+}
+
+var resnet18_layers = [];
+resnet18_layers.push("<option value='conv1'>conv1</option>");
+resnet18_layers.push("<option value='layer1@0@conv2'>layer1@0@conv2</option>");
+resnet18_layers.push("<option value='layer1@1@conv2'>layer1@1@conv2</option>");
+resnet18_layers.push("<option value='layer2@0@conv2'>layer2@0@conv2</option>");
+resnet18_layers.push("<option value='layer2@1@conv2'>layer2@1@conv2</option>");
+resnet18_layers.push("<option value='layer3@0@conv2'>layer3@0@conv2</option>");
+resnet18_layers.push("<option value='layer3@1@conv2'>layer3@1@conv2</option>");
+resnet18_layers.push("<option value='layer4@0@conv2'>layer4@0@conv2</option>");
+resnet18_layers.push("<option value='layer4@1@conv2'>layer4@1@conv2</option>");
+resnet18_layers.push("<option value='fc'>fc</option>");
+resnet18_layers_html = resnet18_layers.join()
+
+var resnet50_layers = [];
+resnet50_layers.push("<option value='conv1'>conv1</option>");
+resnet50_layers.push("<option value='layer1@0@conv3'>layer1@0@conv3</option>");
+resnet50_layers.push("<option value='layer1@1@conv3'>layer1@1@conv3</option>");
+resnet50_layers.push("<option value='layer1@2@conv3'>layer1@2@conv3</option>");
+resnet50_layers.push("<option value='layer2@0@conv3'>layer2@0@conv3</option>");
+resnet50_layers.push("<option value='layer2@1@conv3'>layer2@1@conv3</option>");
+resnet50_layers.push("<option value='layer2@2@conv3'>layer2@2@conv3</option>");
+resnet50_layers.push("<option value='layer2@3@conv3'>layer2@3@conv3</option>");
+resnet50_layers.push("<option value='layer3@0@conv3'>layer3@0@conv3</option>");
+resnet50_layers.push("<option value='layer3@1@conv3'>layer3@1@conv3</option>");
+resnet50_layers.push("<option value='layer3@2@conv3'>layer3@2@conv3</option>");
+resnet50_layers.push("<option value='layer3@3@conv3'>layer3@3@conv3</option>");
+resnet50_layers.push("<option value='layer3@4@conv3'>layer3@4@conv3</option>");
+resnet50_layers.push("<option value='layer3@5@conv3'>layer3@5@conv3</option>");
+resnet50_layers.push("<option value='layer4@0@conv3'>layer4@0@conv3</option>");
+resnet50_layers.push("<option value='layer4@1@conv3'>layer4@1@conv3</option>");
+resnet50_layers.push("<option value='layer4@2@conv3'>layer4@2@conv3</option>");
+resnet50_layers.push("<option value='fc'>fc</option>");
+resnet50_layers_html = resnet50_layers.join()
+
+
+var vitb16_layers = [];
+vitb16_layers.push("<option value='conv_proj'>conv_proj</option>");
+vitb16_layers.push("<option value='encoder@layers@encoder_layer_0@self_attention'>encoder@layers@encoder_layer_0@self_attention</option>");
+vitb16_layers.push("<option value='encoder@layers@encoder_layer_0@mlp@3'>encoder@layers@encoder_layer_0@mlp@3</option>");
+vitb16_layers.push("<option value='encoder@layers@encoder_layer_3@self_attention'>encoder@layers@encoder_layer_3@self_attention</option>");
+vitb16_layers.push("<option value='encoder@layers@encoder_layer_3@mlp@3'>encoder@layers@encoder_layer_3@mlp@3</option>");
+vitb16_layers.push("<option value='encoder@layers@encoder_layer_7@self_attention'>encoder@layers@encoder_layer_7@self_attention</option>");
+vitb16_layers.push("<option value='encoder@layers@encoder_layer_7@mlp@3'>encoder@layers@encoder_layer_7@mlp@3</option>");
+vitb16_layers.push("<option value='encoder@layers@encoder_layer_11@self_attention'>encoder@layers@encoder_layer_11@self_attention</option>");
+vitb16_layers.push("<option value='encoder@layers@encoder_layer_11@mlp@3'>encoder@layers@encoder_layer_11@mlp@3</option>");
+vitb16_layers.push("<option value='heads@head'>heads@head</option>");
+vitb16_layers_html = vitb16_layers.join()
+
+
+alexnet_bases_html = '<option value="pca">PCA</option><option value="neuron">Neuron</option>'
+resnet50_bases_html = '<option value="pca">PCA</option>'
+resnet18_bases_html = '<option value="pca">PCA</option><option value="neuron">Neuron</option>'
+vitb16_bases_html = '<option value="pca">PCA</option><option value="neuron">Neuron</option>'
+
+var prev_component_idx = 1;
+document.getElementById('number').value = prev_component_idx;
+function component_changed() {
+    var model_name = document.getElementById("model").value;
+    var component_selector = document.getElementById("number");
+    var component_idx = component_selector.value;
+    var layer_name = document.getElementById("layer").value;
+    var n_components = -1
+    if (model_name == 'resnet50' || model_name == 'resnet18' || model_name == 'vit_b_16') {
+        n_components = 16
+    } else if (model_name == 'alexnet') {
+        n_components = alexnet_dict[layer_name]
+    }
+    console.log(layer_name)
+    console.log(n_components)
+    if (component_idx > n_components) {
+        component_selector.value = prev_component_idx;
+    } else {
+        update_img();
+        prev_component_idx = component_selector.value
+    }
+}
+
+function layer_changed() {
+    var component_selector = document.getElementById("number");
+    component_selector.value = 1;
+    
+    var model_name = document.getElementById("model").value;
+    var layer_name = document.getElementById("layer").value;
+    var n_components = -1
+    if (model_name == 'resnet50' || model_name == 'resnet18' || model_name == 'vit_b_16') {
+        n_components = 16
+    } else if (model_name == 'alexnet') {
+        n_components = alexnet_dict[layer_name]
+    }
+    var max_component_span = document.getElementById("max_components");
+    max_component_span.textContent = " / " + n_components + " available in descending variance order"
+    update_img();
+}
+
+function model_changed() {
+    var model_name = document.getElementById("model").value;
+    if (model_name == 'resnet50') {
+        document.getElementById("layer").innerHTML = resnet50_layers_html;
+        document.getElementById("basis").innerHTML = resnet50_bases_html;
+    } else if (model_name == 'alexnet') {
+        document.getElementById("layer").innerHTML = alexnet_layers_html;
+        document.getElementById("basis").innerHTML = alexnet_bases_html;
+    } else if (model_name == 'resnet18') {
+        document.getElementById("layer").innerHTML = resnet18_layers_html;
+        document.getElementById("basis").innerHTML = resnet18_bases_html;
+    } else if (model_name == 'vit_b_16') {
+        document.getElementById("layer").innerHTML = vitb16_layers_html;
+        document.getElementById("basis").innerHTML = vitb16_bases_html;
+    }
+    layer_changed();
+}
+
+function update_img() {
+    var model_name = document.getElementById("model").value;
+    var basis_name = document.getElementById("basis").value;
+    var layer_name = document.getElementById("layer").value;
+    var true_component_idx = String(document.getElementById("number").value) - 1;
+    var img_path = 'img_tmlr_241104_pruned/' + model_name + '/' + basis_name + '/' + layer_name + '/' + true_component_idx + '.jpg';
+    document.getElementById('vis').src = img_path;
+}
+update_img();
+</script>
+
+</body>
+</html>
+</html>
